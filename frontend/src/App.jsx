@@ -21,38 +21,70 @@ function App() {
     setActiveSessionId(newSession.id)
   }
 
-  const handleSendMessage = (message) => {
+  const handleSendMessage = async (message) => {
+    // Add user message immediately
     setSessions(sessions.map(session => {
       if (session.id === activeSessionId) {
-        const newMessages = [
-          ...session.messages,
-          { id: Date.now(), text: message, isUser: true }
-        ]
-        
-        // Simulate bot response
-        setTimeout(() => {
-          setSessions(prev => prev.map(s => {
-            if (s.id === activeSessionId) {
-              return {
-                ...s,
-                messages: [
-                  ...s.messages,
-                  { 
-                    id: Date.now(), 
-                    text: 'This is a demo response. In a real app, this would be connected to an AI API.', 
-                    isUser: false 
-                  }
-                ]
-              }
-            }
-            return s
-          }))
-        }, 500)
-
-        return { ...session, messages: newMessages }
+        return {
+          ...session,
+          messages: [
+            ...session.messages,
+            { id: Date.now(), text: message, isUser: true }
+          ]
+        }
       }
       return session
     }))
+
+    // Call backend API
+    try {
+      const response = await fetch('http://localhost:5001/query', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ message })
+      })
+
+      const data = await response.json()
+
+      // Add bot response
+      setSessions(prev => prev.map(s => {
+        if (s.id === activeSessionId) {
+          return {
+            ...s,
+            messages: [
+              ...s.messages,
+              { 
+                id: Date.now(), 
+                text: data.reply || 'Sorry, I could not process your request.', 
+                isUser: false 
+              }
+            ]
+          }
+        }
+        return s
+      }))
+    } catch (error) {
+      console.error('Error calling backend:', error)
+      // Add error message
+      setSessions(prev => prev.map(s => {
+        if (s.id === activeSessionId) {
+          return {
+            ...s,
+            messages: [
+              ...s.messages,
+              { 
+                id: Date.now(), 
+                text: 'Sorry, there was an error connecting to the server. Please make sure the backend is running.', 
+                isUser: false 
+              }
+            ]
+          }
+        }
+        return s
+      }))
+    }
   }
 
   return (
