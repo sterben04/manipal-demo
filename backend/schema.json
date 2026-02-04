@@ -1,0 +1,69 @@
+{
+  "database": "movies.db",
+  "tables": [
+    {
+      "name": "movies",
+      "description": "Store information about movies including ratings, box office, and metadata",
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "constraints": ["PRIMARY KEY", "AUTOINCREMENT"],
+          "description": "Unique identifier for each movie"
+        },
+        {
+          "name": "title",
+          "type": "TEXT",
+          "constraints": ["NOT NULL"],
+          "description": "Movie title"
+        },
+        {
+          "name": "year",
+          "type": "INTEGER",
+          "constraints": ["NOT NULL"],
+          "description": "Release year"
+        },
+        {
+          "name": "genre",
+          "type": "TEXT",
+          "constraints": ["NOT NULL"],
+          "description": "Primary genre (e.g., Action, Drama, Sci-Fi, Crime, Thriller)"
+        },
+        {
+          "name": "director",
+          "type": "TEXT",
+          "constraints": ["NOT NULL"],
+          "description": "Director name"
+        },
+        {
+          "name": "rating",
+          "type": "REAL",
+          "constraints": ["NOT NULL"],
+          "description": "Movie rating out of 10"
+        },
+        {
+          "name": "box_office",
+          "type": "REAL",
+          "constraints": [],
+          "description": "Box office revenue in millions (USD), nullable"
+        },
+        {
+          "name": "runtime",
+          "type": "INTEGER",
+          "constraints": [],
+          "description": "Runtime in minutes, nullable"
+        },
+        {
+          "name": "description",
+          "type": "TEXT",
+          "constraints": [],
+          "description": "Brief description or synopsis of the movie, nullable"
+        }
+      ],
+      "indexes": [],
+      "sample_data_count": 15
+    }
+  ],
+  "version": "1.0.0",
+  "last_updated": "2026-02-04"
+}

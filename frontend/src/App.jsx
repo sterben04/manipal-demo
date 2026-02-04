@@ -48,23 +48,51 @@ function App() {
 
       const data = await response.json()
 
-      // Add bot response
-      setSessions(prev => prev.map(s => {
-        if (s.id === activeSessionId) {
-          return {
-            ...s,
-            messages: [
-              ...s.messages,
-              { 
-                id: Date.now(), 
-                text: data.reply || 'Sorry, I could not process your request.', 
-                isUser: false 
-              }
-            ]
+      // Handle response based on status
+      if (data.status === 'success' && data.data) {
+        // Add bot response with query results
+        setSessions(prev => prev.map(s => {
+          if (s.id === activeSessionId) {
+            return {
+              ...s,
+              messages: [
+                ...s.messages,
+                { 
+                  id: Date.now(), 
+                  text: null,
+                  queryResult: {
+                    sql: data.sql,
+                    explanation: data.explanation,
+                    data: data.data,
+                    columns: data.columns,
+                    row_count: data.row_count
+                  },
+                  isUser: false 
+                }
+              ]
+            }
           }
-        }
-        return s
-      }))
+          return s
+        }))
+      } else {
+        // Handle error response from backend
+        setSessions(prev => prev.map(s => {
+          if (s.id === activeSessionId) {
+            return {
+              ...s,
+              messages: [
+                ...s.messages,
+                { 
+                  id: Date.now(), 
+                  text: data.error || 'Sorry, I could not process your request.', 
+                  isUser: false 
+                }
+              ]
+            }
+          }
+          return s
+        }))
+      }
     } catch (error) {
       console.error('Error calling backend:', error)
       // Add error message

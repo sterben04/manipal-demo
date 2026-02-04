@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import ResultsTable from './ResultsTable'
 import './ChatWindow.css'
 
 function ChatWindow({ session, onSendMessage }) {
@@ -27,7 +28,16 @@ function ChatWindow({ session, onSendMessage }) {
         {session?.messages.length === 0 ? (
           <div className="empty-state">
             <h2>Start a conversation</h2>
-            <p>Type a message below to begin</p>
+            <p>Ask questions about the movie database</p>
+            <div className="example-queries">
+              <p><strong>Try asking:</strong></p>
+              <ul>
+                <li>"Show me the top rated movies"</li>
+                <li>"Which movies made over 1 billion?"</li>
+                <li>"List all Sci-Fi movies"</li>
+                <li>"Who directed The Dark Knight?"</li>
+              </ul>
+            </div>
           </div>
         ) : (
           <div className="messages">
@@ -40,7 +50,16 @@ function ChatWindow({ session, onSendMessage }) {
                   {message.isUser ? '👤' : '🤖'}
                 </div>
                 <div className="message-content">
-                  {message.text}
+                  {message.text && <div className="message-text">{message.text}</div>}
+                  {message.queryResult && (
+                    <ResultsTable
+                      data={message.queryResult.data}
+                      columns={message.queryResult.columns}
+                      sql={message.queryResult.sql}
+                      explanation={message.queryResult.explanation}
+                      rowCount={message.queryResult.row_count}
+                    />
+                  )}
                 </div>
               </div>
             ))}
@@ -54,7 +73,7 @@ function ChatWindow({ session, onSendMessage }) {
           <input
             type="text"
             className="message-input"
-            placeholder="Send a message..."
+            placeholder="Ask about movies..."
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
           />

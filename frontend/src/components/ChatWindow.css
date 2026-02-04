@@ -30,6 +30,37 @@
   font-size: 16px;
 }
 
+.example-queries {
+  margin-top: 24px;
+  text-align: left;
+  max-width: 400px;
+  background-color: #40414f;
+  padding: 20px;
+  border-radius: 8px;
+}
+
+.example-queries p {
+  margin-bottom: 12px;
+  color: #ececf1;
+}
+
+.example-queries ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.example-queries li {
+  padding: 8px 0;
+  color: #8e8ea0;
+  font-size: 14px;
+  border-bottom: 1px solid #4d4d4f;
+}
+
+.example-queries li:last-child {
+  border-bottom: none;
+}
+
 .messages {
   max-width: 800px;
   margin: 0 auto;
@@ -69,6 +100,10 @@
   line-height: 1.6;
   color: #ececf1;
   word-wrap: break-word;
+}
+
+.message-text {
+  margin-bottom: 12px;
 }
 
 .input-container {

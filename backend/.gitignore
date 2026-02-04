@@ -5,9 +5,14 @@ __pycache__/
 *.so
 .Python
 venv/
+v-env/
 env/
 ENV/
 .venv
+
+# Environment variables
+.env
+.env.local
 
 # Flask
 instance/
@@ -21,3 +26,8 @@ instance/
 
 # OS
 .DS_Store
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
