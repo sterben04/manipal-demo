@@ -22,28 +22,58 @@ function App() {
   }
 
   const handleSendMessage = async (message) => {
-    // Add user message immediately
+    // Get the current active session to extract its history
+    const currentSession = sessions.find(s => s.id === activeSessionId)
+    
+    // Convert message history to the format expected by backend
+    const conversationHistory = currentSession?.messages.map(msg => {
+      if (msg.isUser) {
+        return {
+          role: 'user',
+          content: msg.text
+        }
+      } else {
+        return {
+          role: 'assistant',
+          sql: msg.queryResult?.sql || '',
+          explanation: msg.queryResult?.explanation || ''
+        }
+      }
+    }) || []
+
+    // Add user message immediately and update title if it's the first message
     setSessions(sessions.map(session => {
       if (session.id === activeSessionId) {
+        const updatedMessages = [
+          ...session.messages,
+          { id: Date.now(), text: message, isUser: true }
+        ]
+        
+        // Update title with first message (truncated to 30 chars)
+        const newTitle = session.messages.length === 0 
+          ? (message.length > 30 ? message.substring(0, 30) + '...' : message)
+          : session.title
+        
         return {
           ...session,
-          messages: [
-            ...session.messages,
-            { id: Date.now(), text: message, isUser: true }
-          ]
+          title: newTitle,
+          messages: updatedMessages
         }
       }
       return session
     }))
 
-    // Call backend API
+    // Call backend API with conversation history
     try {
       const response = await fetch('http://localhost:5001/query', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ message })
+        body: JSON.stringify({ 
+          message,
+          history: conversationHistory  // Send chat history for context
+        })
       })
 
       const data = await response.json()
