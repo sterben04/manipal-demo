@@ -32,10 +32,11 @@ function ChatWindow({ session, onSendMessage }) {
             <div className="example-queries">
               <p><strong>Try asking:</strong></p>
               <ul>
-                <li>"Show me the top rated movies"</li>
-                <li>"Which movies made over 1 billion?"</li>
-                <li>"List all Sci-Fi movies"</li>
-                <li>"Who directed The Dark Knight?"</li>
+                <li>"Show me movies with box office over 500 million and ratings above 8.5"</li>
+                <li>"Which actors appeared in Christopher Nolan films?"</li>
+                <li>"List movies with Rotten Tomatoes score above 90"</li>
+                <li>"Show the most profitable movies (revenue minus budget)"</li>
+                <li>"Which movies did Tom Hanks act in?"</li>
               </ul>
             </div>
           </div>

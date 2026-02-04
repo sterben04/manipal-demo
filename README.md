@@ -18,6 +18,7 @@ A full-stack application that allows users to query a movie database using natur
 - **SQLite**: Lightweight database
 - **LangChain**: AI framework for LLM integration
 - **Google Gemini**: AI model for natural language processing
+- **LangSmith**: Tracing and monitoring for LangChain (optional)
 
 ### Frontend
 - **React**: UI library
@@ -50,6 +51,7 @@ manipal-demo/
 - Python 3.8+
 - Node.js 16+
 - Google API Key (get from [Google AI Studio](https://makersuite.google.com/app/apikey))
+- LangSmith API Key (optional, for tracing - get from [LangSmith](https://smith.langchain.com/))
 
 ### Backend Setup
 
@@ -71,10 +73,18 @@ venv\Scripts\activate  # On Windows
 pip install -r requirements.txt
 ```
 
-4. Create a `.env` file with your Google API key:
+4. Create a `.env` file with your API keys:
 ```bash
+# Required
 echo "GOOGLE_API_KEY=your_google_api_key_here" > .env
+
+# Optional: Add LangSmith for tracing
+echo "LANGCHAIN_TRACING_V2=true" >> .env
+echo "LANGCHAIN_API_KEY=your_langsmith_api_key_here" >> .env
+echo "LANGCHAIN_PROJECT=manipal-demo-nl-to-sql" >> .env
 ```
+
+**Note:** LangSmith is optional. The app works without it, but LangSmith provides valuable tracing and monitoring capabilities for debugging and optimizing your LangChain operations.
 
 5. Run the Flask server:
 ```bash
@@ -121,17 +131,24 @@ The application will:
 
 ## Database Schema
 
-The application includes a movies table with the following columns:
+The application uses a normalized database structure with 4 related tables:
 
-- `id`: Unique identifier (Primary Key)
-- `title`: Movie title
-- `year`: Release year
-- `genre`: Movie genre
-- `director`: Director name
-- `rating`: Rating out of 10
-- `box_office`: Box office revenue in millions (USD)
-- `runtime`: Runtime in minutes
-- `description`: Brief synopsis
+### 1. **movies** - Core movie information
+- `id`, `title`, `year`, `genre`, `director`, `runtime`, `description`
+
+### 2. **box_office** - Financial data
+- `movie_id` (FK), `domestic_revenue`, `international_revenue`, `total_revenue`, `budget`, `opening_weekend`
+
+### 3. **ratings** - Rating information
+- `movie_id` (FK), `imdb_rating`, `rotten_tomatoes`, `metacritic`, `audience_score`
+
+### 4. **cast** - Actors and crew
+- `movie_id` (FK), `person_name`, `role_type`, `character_name`
+
+This normalized structure allows for complex queries like:
+- "Show movies with box office over $500M and ratings above 8.5"
+- "Which actors appeared in Christopher Nolan films?"
+- "Compare domestic vs international revenue for Sci-Fi movies"
 
 See `backend/schema.json` for the complete schema definition.
 
@@ -142,15 +159,10 @@ Convert natural language to SQL and execute query
 - Request: `{ "message": "your question" }`
 - Response: SQL, explanation, data, and results
 
-### GET /movies
-Get all movies or filter by genre
-- Query params: `genre` (optional)
-
-### GET /movies/:id
-Get a specific movie by ID
-
 ### GET /health
 Health check endpoint
+
+All data queries go through the natural language `/query` endpoint - there are no direct REST endpoints for accessing specific tables.
 
 ## Safety Features
 
@@ -158,6 +170,34 @@ Health check endpoint
 - Query validation prevents harmful SQL operations
 - No INSERT, UPDATE, DELETE, DROP, or other modifying operations
 - All queries are sanitized and validated before execution
+
+## Monitoring with LangSmith (Optional)
+
+LangSmith provides powerful tracing and monitoring for your LangChain operations:
+
+### Setup:
+1. Sign up at [smith.langchain.com](https://smith.langchain.com/)
+2. Get your API key from settings
+3. Add to your `.env` file:
+   ```bash
+   LANGCHAIN_TRACING_V2=true
+   LANGCHAIN_API_KEY=your_langsmith_api_key
+   LANGCHAIN_PROJECT=manipal-demo-nl-to-sql
+   ```
+
+### Benefits:
+- **Trace LLM calls**: See exactly what prompts are sent to Gemini
+- **Monitor performance**: Track latency and token usage
+- **Debug issues**: View failed queries and error details
+- **Optimize prompts**: A/B test different prompt strategies
+- **View conversations**: See the full chain execution flow
+
+### Accessing Traces:
+Once configured, visit your LangSmith dashboard to view:
+- All natural language → SQL conversions
+- Prompt templates and responses
+- Execution times and costs
+- Error rates and failure patterns
 
 ## Development
 
