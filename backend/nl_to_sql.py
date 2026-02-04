@@ -25,7 +25,7 @@ def generate_sql_from_prompt(user_prompt):
         llm = ChatGoogleGenerativeAI(
             model="gemini-2.5-flash",
             google_api_key=os.getenv('GOOGLE_API_KEY'),
-            temperature=0.1,
+            temperature=0,
             convert_system_message_to_human=True
         )
         

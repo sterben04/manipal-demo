@@ -3,7 +3,7 @@
   "tables": [
     {
       "name": "movies",
-      "description": "Store information about movies including ratings, box office, and metadata",
+      "description": "Core movie information including title, year, genre, director, and description",
       "columns": [
         {
           "name": "id",
@@ -36,34 +36,154 @@
           "description": "Director name"
         },
         {
-          "name": "rating",
-          "type": "REAL",
-          "constraints": ["NOT NULL"],
-          "description": "Movie rating out of 10"
-        },
-        {
-          "name": "box_office",
-          "type": "REAL",
-          "constraints": [],
-          "description": "Box office revenue in millions (USD), nullable"
-        },
-        {
           "name": "runtime",
           "type": "INTEGER",
           "constraints": [],
-          "description": "Runtime in minutes, nullable"
+          "description": "Runtime in minutes"
         },
         {
           "name": "description",
           "type": "TEXT",
           "constraints": [],
-          "description": "Brief description or synopsis of the movie, nullable"
+          "description": "Brief description or synopsis of the movie"
         }
       ],
       "indexes": [],
       "sample_data_count": 15
+    },
+    {
+      "name": "box_office",
+      "description": "Financial performance data for movies including revenue and budget information",
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "constraints": ["PRIMARY KEY", "AUTOINCREMENT"],
+          "description": "Unique identifier for box office record"
+        },
+        {
+          "name": "movie_id",
+          "type": "INTEGER",
+          "constraints": ["NOT NULL", "FOREIGN KEY REFERENCES movies(id)"],
+          "description": "Reference to movie in movies table"
+        },
+        {
+          "name": "domestic_revenue",
+          "type": "REAL",
+          "constraints": [],
+          "description": "Domestic box office revenue in millions (USD)"
+        },
+        {
+          "name": "international_revenue",
+          "type": "REAL",
+          "constraints": [],
+          "description": "International box office revenue in millions (USD)"
+        },
+        {
+          "name": "total_revenue",
+          "type": "REAL",
+          "constraints": [],
+          "description": "Total worldwide box office revenue in millions (USD)"
+        },
+        {
+          "name": "budget",
+          "type": "REAL",
+          "constraints": [],
+          "description": "Production budget in millions (USD)"
+        },
+        {
+          "name": "opening_weekend",
+          "type": "REAL",
+          "constraints": [],
+          "description": "Opening weekend revenue in millions (USD)"
+        }
+      ],
+      "indexes": ["movie_id"],
+      "sample_data_count": 15
+    },
+    {
+      "name": "ratings",
+      "description": "Movie ratings from various sources including IMDb, Rotten Tomatoes, and Metacritic",
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "constraints": ["PRIMARY KEY", "AUTOINCREMENT"],
+          "description": "Unique identifier for rating record"
+        },
+        {
+          "name": "movie_id",
+          "type": "INTEGER",
+          "constraints": ["NOT NULL", "FOREIGN KEY REFERENCES movies(id)"],
+          "description": "Reference to movie in movies table"
+        },
+        {
+          "name": "imdb_rating",
+          "type": "REAL",
+          "constraints": [],
+          "description": "IMDb rating out of 10"
+        },
+        {
+          "name": "rotten_tomatoes",
+          "type": "INTEGER",
+          "constraints": [],
+          "description": "Rotten Tomatoes score (percentage)"
+        },
+        {
+          "name": "metacritic",
+          "type": "INTEGER",
+          "constraints": [],
+          "description": "Metacritic score out of 100"
+        },
+        {
+          "name": "audience_score",
+          "type": "INTEGER",
+          "constraints": [],
+          "description": "Audience score (percentage)"
+        }
+      ],
+      "indexes": ["movie_id"],
+      "sample_data_count": 15
+    },
+    {
+      "name": "cast",
+      "description": "Cast and crew members associated with movies including actors, directors, and writers",
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "constraints": ["PRIMARY KEY", "AUTOINCREMENT"],
+          "description": "Unique identifier for cast record"
+        },
+        {
+          "name": "movie_id",
+          "type": "INTEGER",
+          "constraints": ["NOT NULL", "FOREIGN KEY REFERENCES movies(id)"],
+          "description": "Reference to movie in movies table"
+        },
+        {
+          "name": "person_name",
+          "type": "TEXT",
+          "constraints": ["NOT NULL"],
+          "description": "Name of the person (actor, director, writer, etc.)"
+        },
+        {
+          "name": "role_type",
+          "type": "TEXT",
+          "constraints": ["NOT NULL"],
+          "description": "Type of role (Actor, Director, Writer, Producer, etc.)"
+        },
+        {
+          "name": "character_name",
+          "type": "TEXT",
+          "constraints": [],
+          "description": "Character name (for actors only)"
+        }
+      ],
+      "indexes": ["movie_id", "person_name"],
+      "sample_data_count": 60
     }
   ],
-  "version": "1.0.0",
+  "version": "2.0.0",
   "last_updated": "2026-02-04"
 }
