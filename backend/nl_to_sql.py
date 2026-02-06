@@ -37,13 +37,14 @@ def generate_sql_from_prompt(user_prompt, conversation_history=None):
         
         # Build schema description for the prompt
         schema_desc = "Database Schema:\n\n"
+        
+        # First, describe all tables
         for table in schema['tables']:
             schema_desc += f"Table: {table['name']}\n"
             schema_desc += f"Description: {table['description']}\n"
             schema_desc += "Columns:\n"
             for col in table['columns']:
-                constraints = ', '.join(col['constraints']) if col['constraints'] else 'nullable'
-                col_desc = f"  - {col['name']} ({col['type']}, {constraints}): {col['description']}"
+                col_desc = f"  - {col['name']} ({col['type']}): {col['description']}"
                 
                 # Add unit information if present
                 if 'unit' in col:
@@ -52,6 +53,17 @@ def generate_sql_from_prompt(user_prompt, conversation_history=None):
                     col_desc += f" [Example: {col['example']}]"
                 
                 schema_desc += col_desc + "\n"
+            schema_desc += "\n"
+        
+        # Then, show relationships at the end
+        if 'relationships' in schema:
+            schema_desc += "Table Relationships:\n"
+            for rel in schema['relationships']:
+                rel_type = rel.get('type', 'unknown').upper()
+                schema_desc += f"  - {rel['from']} → {rel['to']} [{rel_type}]"
+                if 'description' in rel:
+                    schema_desc += f": {rel['description']}"
+                schema_desc += "\n"
             schema_desc += "\n"
         
         # Build conversation context if history exists
