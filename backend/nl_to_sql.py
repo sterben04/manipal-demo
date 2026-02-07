@@ -11,6 +11,48 @@ def load_schema():
     with open(schema_path, 'r') as f:
         return json.load(f)
 
+def parse_schema_description(schema):
+    """
+    Parse schema dictionary and return formatted string description for the LLM
+    
+    Args:
+        schema (dict): Schema dictionary from schema.json
+        
+    Returns:
+        str: Formatted schema description for the prompt
+    """
+    schema_desc = "Database Schema:\n\n"
+    
+    # First, describe all tables
+    for table in schema['tables']:
+        schema_desc += f"Table: {table['name']}\n"
+        schema_desc += f"Description: {table['description']}\n"
+        schema_desc += "Columns:\n"
+        for col in table['columns']:
+            col_desc = f"  - {col['name']} ({col['type']}): {col['description']}"
+            
+            # Add unit information if present
+            if 'unit' in col:
+                col_desc += f" [Unit: {col['unit']}]"
+            if 'example' in col:
+                col_desc += f" [Example: {col['example']}]"
+            
+            schema_desc += col_desc + "\n"
+        schema_desc += "\n"
+    
+    # Then, show relationships at the end
+    if 'relationships' in schema:
+        schema_desc += "Table Relationships:\n"
+        for rel in schema['relationships']:
+            rel_type = rel.get('type', 'unknown').upper()
+            schema_desc += f"  - {rel['from']} → {rel['to']} [{rel_type}]"
+            if 'description' in rel:
+                schema_desc += f": {rel['description']}"
+            schema_desc += "\n"
+        schema_desc += "\n"
+    
+    return schema_desc
+
 def generate_sql_from_prompt(user_prompt, conversation_history=None):
     """
     Convert natural language prompt to SQL query using Google Gemini via LangChain
@@ -28,43 +70,12 @@ def generate_sql_from_prompt(user_prompt, conversation_history=None):
         llm = ChatGoogleGenerativeAI(
             model="gemini-2.5-flash",
             google_api_key=os.getenv('GOOGLE_API_KEY'),
-            temperature=0,
-            convert_system_message_to_human=True
+            temperature=0
         )
         
-        # Load schema
+        # Load schema and parse description
         schema = load_schema()
-        
-        # Build schema description for the prompt
-        schema_desc = "Database Schema:\n\n"
-        
-        # First, describe all tables
-        for table in schema['tables']:
-            schema_desc += f"Table: {table['name']}\n"
-            schema_desc += f"Description: {table['description']}\n"
-            schema_desc += "Columns:\n"
-            for col in table['columns']:
-                col_desc = f"  - {col['name']} ({col['type']}): {col['description']}"
-                
-                # Add unit information if present
-                if 'unit' in col:
-                    col_desc += f" [Unit: {col['unit']}]"
-                if 'example' in col:
-                    col_desc += f" [Example: {col['example']}]"
-                
-                schema_desc += col_desc + "\n"
-            schema_desc += "\n"
-        
-        # Then, show relationships at the end
-        if 'relationships' in schema:
-            schema_desc += "Table Relationships:\n"
-            for rel in schema['relationships']:
-                rel_type = rel.get('type', 'unknown').upper()
-                schema_desc += f"  - {rel['from']} → {rel['to']} [{rel_type}]"
-                if 'description' in rel:
-                    schema_desc += f": {rel['description']}"
-                schema_desc += "\n"
-            schema_desc += "\n"
+        schema_desc = parse_schema_description(schema)
         
         # Build conversation context if history exists
         conversation_context = ""
@@ -141,19 +152,16 @@ A: SELECT m.title, m.year, b.budget, b.total_revenue, ROUND(((b.total_revenue - 
             ("human", "{user_question}")
         ])
         
-        # Format the prompt
-        formatted_prompt = prompt_template.format_messages(
-            schema_desc=schema_desc,
-            conversation_context=conversation_context,
-            format_instructions=format_instructions,
-            user_question=user_prompt
-        )
+        # Create chain: prompt -> LLM -> parser
+        chain = prompt_template | llm | output_parser
         
-        # Get response from LLM
-        response = llm.invoke(formatted_prompt)
-        
-        # Parse the response
-        result = output_parser.parse(response.content)
+        # Invoke the chain with all variables
+        result = chain.invoke({
+            "schema_desc": schema_desc,
+            "conversation_context": conversation_context,
+            "format_instructions": format_instructions,
+            "user_question": user_prompt
+        })
         
         return {
             'sql': result.get('sql', ''),
