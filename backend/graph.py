@@ -1,20 +1,23 @@
 """
-LangGraph Movie Agent - Step 2: Vector DB
+LangGraph Movie Agent - Step 3: Tools
 
-Two-node graph: retrieve (ChromaDB) -> generate (Gemini).
-Demonstrates: multiple nodes, sequential edges, RAG pattern.
+Agent with tools: vector search, SQL query, and internet search (Tavily).
+Demonstrates: tool calling, ToolNode, conditional edges, agent loop.
 """
 
 import os
 from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
-from langchain_core.messages import SystemMessage, HumanMessage, AIMessage, AnyMessage
+from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
+from langchain_core.tools import tool
 from langchain_chroma import Chroma
-from langgraph.graph import StateGraph, START, END
-from langgraph.graph.message import add_messages
-from typing import TypedDict, Annotated
-from database import get_db_connection
+from langchain_community.tools.tavily_search import TavilySearchResults
+from langgraph.graph import StateGraph, MessagesState, START, END
+from langgraph.prebuilt import ToolNode, tools_condition
+from database import get_db_connection, execute_sql_query
+from nl_to_sql import validate_sql_query
 
 
+# -- Vector Store Setup --
 def init_vector_store():
     """Initialize ChromaDB with movie data from SQLite"""
     embeddings = GoogleGenerativeAIEmbeddings(
@@ -29,7 +32,6 @@ def init_vector_store():
         collection_name="movies"
     )
 
-    # Only populate if empty
     if vectorstore._collection.count() == 0:
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -70,52 +72,80 @@ def init_vector_store():
     return vectorstore
 
 
-# Initialize vector store at startup
 vectorstore = init_vector_store()
 
 
-# Custom state: messages + retrieved context
-class AgentState(TypedDict):
-    messages: Annotated[list[AnyMessage], add_messages]
-    context: str
+# -- Define Tools --
 
+@tool
+def search_movies(query: str) -> str:
+    """Search the movie database for information about movie plots, descriptions,
+    directors, and ratings. Use this for general movie questions."""
+    docs = vectorstore.similarity_search(query, k=3)
+    return "\n\n---\n\n".join(doc.page_content for doc in docs)
+
+
+@tool
+def query_movie_sql(sql_query: str) -> str:
+    """Execute a SQL query against the movie database. Only SELECT queries allowed.
+    Tables: movies (id, title, year, genre, director, runtime, description),
+    box_office (movie_id, domestic_revenue, international_revenue, total_revenue,
+    budget, opening_weekend) - all in MILLIONS USD,
+    ratings (movie_id, imdb_rating, rotten_tomatoes, metacritic, audience_score),
+    cast (movie_id, person_name, role_type, character_name).
+    Use aliases: m=movies, b=box_office, r=ratings, c=cast. Join on movie_id."""
+    is_valid, error = validate_sql_query(sql_query)
+    if not is_valid:
+        return f"Error: {error}"
+    result = execute_sql_query(sql_query)
+    if result['success']:
+        if result['row_count'] == 0:
+            return "No results found."
+        return str(result['data'][:10])
+    return f"Error: {result.get('error', 'Unknown')}"
+
+
+internet_search = TavilySearchResults(max_results=3)
+
+tools = [search_movies, query_movie_sql, internet_search]
+
+
+# -- Build Graph --
 
 def create_graph():
-    """Create a two-node graph: retrieve -> generate"""
+    """Create agent graph with tool calling loop"""
     llm = ChatGoogleGenerativeAI(
         model="gemini-2.5-flash",
         google_api_key=os.getenv('GOOGLE_API_KEY'),
         temperature=0
-    )
+    ).bind_tools(tools)
 
-    def retrieve(state: AgentState):
-        """Node 1: Search vector DB for relevant movies"""
-        last_msg = state["messages"][-1]
-        query = last_msg.content if hasattr(last_msg, 'content') else str(last_msg)
-        docs = vectorstore.similarity_search(query, k=3)
-        context = "\n\n---\n\n".join(doc.page_content for doc in docs)
-        return {"context": context}
-
-    def generate(state: AgentState):
-        """Node 2: Generate response using retrieved context"""
-        context = state.get("context", "")
+    def agent_node(state: MessagesState):
+        """Agent node: decides whether to use tools or respond directly"""
         system = SystemMessage(content=(
-            "You are a movie expert with access to a movie database. "
-            "Use the following retrieved movie information to answer:\n\n"
-            f"{context}\n\n"
-            "If the information doesn't fully answer the question, "
-            "supplement with your general knowledge. Keep responses concise."
+            "You are a movie expert agent with access to these tools:\n"
+            "1. search_movies - Search vector DB for movie plots, descriptions, info\n"
+            "2. query_movie_sql - Run SQL queries for specific data (box office, ratings, cast)\n"
+            "3. tavily_search_results_json - Search the internet for current movie news\n\n"
+            "Choose the right tool based on the question:\n"
+            "- Plot/description questions -> search_movies\n"
+            "- Specific numbers/stats/comparisons -> query_movie_sql\n"
+            "- Current events/news/upcoming movies -> tavily_search_results_json\n"
+            "Keep final responses concise."
         ))
         response = llm.invoke([system] + state["messages"])
         return {"messages": [response]}
 
-    # Build graph: START -> retrieve -> generate -> END
-    graph = StateGraph(AgentState)
-    graph.add_node("retrieve", retrieve)
-    graph.add_node("generate", generate)
-    graph.add_edge(START, "retrieve")
-    graph.add_edge("retrieve", "generate")
-    graph.add_edge("generate", END)
+    tool_node = ToolNode(tools)
+
+    # Build graph with agent loop:
+    #   START -> agent -> (tools_condition) -> tools -> agent -> ... -> END
+    graph = StateGraph(MessagesState)
+    graph.add_node("agent", agent_node)
+    graph.add_node("tools", tool_node)
+    graph.add_edge(START, "agent")
+    graph.add_conditional_edges("agent", tools_condition)
+    graph.add_edge("tools", "agent")
 
     return graph.compile()
 
@@ -137,5 +167,5 @@ def run_agent(user_message, history=None):
 
     messages.append(HumanMessage(content=user_message))
 
-    result = agent.invoke({"messages": messages, "context": ""})
+    result = agent.invoke({"messages": messages})
     return result["messages"][-1].content
