@@ -1,23 +1,31 @@
 """
-LangGraph Movie Agent - Step 3: Tools
+LangGraph Movie Agent - Step 4: Multi-Node with Router
 
-Agent with tools: vector search, SQL query, and internet search (Tavily).
-Demonstrates: tool calling, ToolNode, conditional edges, agent loop.
+Router node classifies queries and routes to specialized nodes:
+  - movie_expert: Uses vector DB for plot/description questions
+  - sql_analyst: Uses SQL for data/stats questions
+  - researcher: Uses Tavily for current events/news
+
+Demonstrates: conditional edges, routing, multiple specialized nodes,
+and how graph structure changes agent behavior.
 """
 
 import os
 from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
-from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
+from langchain_core.messages import SystemMessage, HumanMessage, AIMessage, AnyMessage
 from langchain_core.tools import tool
 from langchain_chroma import Chroma
 from langchain_community.tools.tavily_search import TavilySearchResults
-from langgraph.graph import StateGraph, MessagesState, START, END
-from langgraph.prebuilt import ToolNode, tools_condition
+from langgraph.graph import StateGraph, START, END
+from langgraph.graph.message import add_messages
+from typing import TypedDict, Annotated, Literal
+from pydantic import BaseModel, Field
 from database import get_db_connection, execute_sql_query
 from nl_to_sql import validate_sql_query
 
 
-# -- Vector Store Setup --
+# -- Vector Store Setup (same as step 2/3) --
+
 def init_vector_store():
     """Initialize ChromaDB with movie data from SQLite"""
     embeddings = GoogleGenerativeAIEmbeddings(
@@ -75,77 +83,156 @@ def init_vector_store():
 vectorstore = init_vector_store()
 
 
-# -- Define Tools --
+# -- Router Schema --
 
-@tool
-def search_movies(query: str) -> str:
-    """Search the movie database for information about movie plots, descriptions,
-    directors, and ratings. Use this for general movie questions."""
-    docs = vectorstore.similarity_search(query, k=3)
-    return "\n\n---\n\n".join(doc.page_content for doc in docs)
-
-
-@tool
-def query_movie_sql(sql_query: str) -> str:
-    """Execute a SQL query against the movie database. Only SELECT queries allowed.
-    Tables: movies (id, title, year, genre, director, runtime, description),
-    box_office (movie_id, domestic_revenue, international_revenue, total_revenue,
-    budget, opening_weekend) - all in MILLIONS USD,
-    ratings (movie_id, imdb_rating, rotten_tomatoes, metacritic, audience_score),
-    cast (movie_id, person_name, role_type, character_name).
-    Use aliases: m=movies, b=box_office, r=ratings, c=cast. Join on movie_id."""
-    is_valid, error = validate_sql_query(sql_query)
-    if not is_valid:
-        return f"Error: {error}"
-    result = execute_sql_query(sql_query)
-    if result['success']:
-        if result['row_count'] == 0:
-            return "No results found."
-        return str(result['data'][:10])
-    return f"Error: {result.get('error', 'Unknown')}"
+class RouteDecision(BaseModel):
+    """Route to the appropriate specialist node"""
+    next: Literal["movie_expert", "sql_analyst", "researcher"] = Field(
+        description="Which specialist to handle this query"
+    )
 
 
-internet_search = TavilySearchResults(max_results=3)
+# -- State with routing --
 
-tools = [search_movies, query_movie_sql, internet_search]
+class AgentState(TypedDict):
+    messages: Annotated[list[AnyMessage], add_messages]
+    route: str
 
 
 # -- Build Graph --
 
 def create_graph():
-    """Create agent graph with tool calling loop"""
+    """Create multi-node graph with router and specialists"""
     llm = ChatGoogleGenerativeAI(
         model="gemini-2.5-flash",
         google_api_key=os.getenv('GOOGLE_API_KEY'),
         temperature=0
-    ).bind_tools(tools)
+    )
 
-    def agent_node(state: MessagesState):
-        """Agent node: decides whether to use tools or respond directly"""
+    router_llm = llm.with_structured_output(RouteDecision)
+
+    # -- Router Node --
+    def router(state: AgentState):
+        """Classify the query and decide which specialist to use"""
         system = SystemMessage(content=(
-            "You are a movie expert agent with access to these tools:\n"
-            "1. search_movies - Search vector DB for movie plots, descriptions, info\n"
-            "2. query_movie_sql - Run SQL queries for specific data (box office, ratings, cast)\n"
-            "3. tavily_search_results_json - Search the internet for current movie news\n\n"
-            "Choose the right tool based on the question:\n"
-            "- Plot/description questions -> search_movies\n"
-            "- Specific numbers/stats/comparisons -> query_movie_sql\n"
-            "- Current events/news/upcoming movies -> tavily_search_results_json\n"
-            "Keep final responses concise."
+            "You are a routing agent. Based on the user's question, decide which "
+            "specialist should handle it:\n\n"
+            "- movie_expert: Questions about movie plots, descriptions, themes, "
+            "recommendations, or general movie knowledge\n"
+            "- sql_analyst: Questions needing specific data like box office numbers, "
+            "ratings comparisons, cast lists, rankings, or statistical queries\n"
+            "- researcher: Questions about current events, latest news, upcoming "
+            "releases, or anything requiring real-time internet information\n"
+        ))
+        decision = router_llm.invoke([system] + state["messages"])
+        return {"route": decision.next}
+
+    # -- Specialist: Movie Expert (Vector DB) --
+    def movie_expert(state: AgentState):
+        """Answer using vector search over movie descriptions"""
+        last_msg = state["messages"][-1]
+        query = last_msg.content if hasattr(last_msg, 'content') else str(last_msg)
+        docs = vectorstore.similarity_search(query, k=3)
+        context = "\n\n---\n\n".join(doc.page_content for doc in docs)
+
+        system = SystemMessage(content=(
+            "You are a movie expert. Use the following movie information "
+            "from the database to answer:\n\n"
+            f"{context}\n\n"
+            "Keep responses concise and informative."
         ))
         response = llm.invoke([system] + state["messages"])
         return {"messages": [response]}
 
-    tool_node = ToolNode(tools)
+    # -- Specialist: SQL Analyst (Database) --
+    def sql_analyst(state: AgentState):
+        """Answer using SQL queries against the movie database"""
+        last_msg = state["messages"][-1]
+        query = last_msg.content if hasattr(last_msg, 'content') else str(last_msg)
 
-    # Build graph with agent loop:
-    #   START -> agent -> (tools_condition) -> tools -> agent -> ... -> END
-    graph = StateGraph(MessagesState)
-    graph.add_node("agent", agent_node)
-    graph.add_node("tools", tool_node)
-    graph.add_edge(START, "agent")
-    graph.add_conditional_edges("agent", tools_condition)
-    graph.add_edge("tools", "agent")
+        # Use LLM to generate SQL
+        sql_system = SystemMessage(content=(
+            "Generate a SQLite SELECT query for this question. "
+            "Tables: movies (id, title, year, genre, director, runtime, description), "
+            "box_office (movie_id, domestic_revenue, international_revenue, total_revenue, "
+            "budget, opening_weekend) - all MILLIONS USD, "
+            "ratings (movie_id, imdb_rating, rotten_tomatoes, metacritic, audience_score), "
+            "cast (movie_id, person_name, role_type, character_name). "
+            "Use aliases: m=movies, b=box_office, r=ratings, c=cast. "
+            "Respond with ONLY the SQL query, nothing else."
+        ))
+        sql_response = llm.invoke([sql_system, HumanMessage(content=query)])
+        sql_query = sql_response.content.strip().strip('`').replace('sql\n', '')
+
+        # Execute
+        is_valid, error = validate_sql_query(sql_query)
+        if is_valid:
+            result = execute_sql_query(sql_query)
+            if result['success']:
+                data_str = str(result['data'][:10])
+                context = f"SQL: {sql_query}\nResults ({result['row_count']} rows): {data_str}"
+            else:
+                context = f"SQL failed: {result.get('error', 'Unknown')}"
+        else:
+            context = f"Invalid SQL: {error}"
+
+        # Generate final answer from data
+        answer_system = SystemMessage(content=(
+            "You are a data analyst. Answer the user's question based on "
+            "these database results:\n\n"
+            f"{context}\n\n"
+            "Present the data clearly and concisely."
+        ))
+        response = llm.invoke([answer_system] + state["messages"])
+        return {"messages": [response]}
+
+    # -- Specialist: Researcher (Internet) --
+    def researcher(state: AgentState):
+        """Answer using Tavily internet search"""
+        last_msg = state["messages"][-1]
+        query = last_msg.content if hasattr(last_msg, 'content') else str(last_msg)
+
+        tavily = TavilySearchResults(max_results=3)
+        results = tavily.invoke(query)
+        context = "\n\n".join(
+            r.get('content', '') if isinstance(r, dict) else str(r)
+            for r in results
+        )
+
+        system = SystemMessage(content=(
+            "You are a movie researcher with access to the latest information. "
+            "Use these web search results to answer:\n\n"
+            f"{context}\n\n"
+            "Keep responses concise and cite sources when possible."
+        ))
+        response = llm.invoke([system] + state["messages"])
+        return {"messages": [response]}
+
+    # -- Routing function --
+    def route_decision(state: AgentState) -> str:
+        return state.get("route", "movie_expert")
+
+    # -- Build the graph --
+    #
+    #                  ┌─> movie_expert ─┐
+    #   START -> router┼─> sql_analyst  ─┼─> END
+    #                  └─> researcher   ─┘
+    #
+    graph = StateGraph(AgentState)
+    graph.add_node("router", router)
+    graph.add_node("movie_expert", movie_expert)
+    graph.add_node("sql_analyst", sql_analyst)
+    graph.add_node("researcher", researcher)
+
+    graph.add_edge(START, "router")
+    graph.add_conditional_edges("router", route_decision, {
+        "movie_expert": "movie_expert",
+        "sql_analyst": "sql_analyst",
+        "researcher": "researcher",
+    })
+    graph.add_edge("movie_expert", END)
+    graph.add_edge("sql_analyst", END)
+    graph.add_edge("researcher", END)
 
     return graph.compile()
 
@@ -167,5 +254,5 @@ def run_agent(user_message, history=None):
 
     messages.append(HumanMessage(content=user_message))
 
-    result = agent.invoke({"messages": messages})
+    result = agent.invoke({"messages": messages, "route": ""})
     return result["messages"][-1].content
