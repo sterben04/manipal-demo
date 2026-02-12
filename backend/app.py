@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from database import init_db, execute_sql_query
 from nl_to_sql import generate_sql_from_prompt, validate_sql_query
+from graph import run_agent
 from dotenv import load_dotenv
 import os
 
@@ -81,6 +82,23 @@ def query():
             'error': str(e),
             'status': 'error'
         }), 500
+
+@app.route('/agent', methods=['POST'])
+def agent():
+    """LangGraph agent endpoint for conversational movie queries"""
+    try:
+        data = request.get_json()
+        user_message = data.get('message', '')
+        conversation_history = data.get('history', [])
+
+        if not user_message:
+            return jsonify({'error': 'No message provided', 'status': 'error'}), 400
+
+        response = run_agent(user_message, conversation_history)
+        return jsonify({'status': 'success', 'response': response}), 200
+
+    except Exception as e:
+        return jsonify({'error': str(e), 'status': 'error'}), 500
 
 @app.route('/health', methods=['GET'])
 def health():

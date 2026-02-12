@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import ResultsTable from './ResultsTable'
 import './ChatWindow.css'
 
-function ChatWindow({ session, onSendMessage }) {
+function ChatWindow({ session, onSendMessage, mode, onModeChange }) {
   const [inputValue, setInputValue] = useState('')
   const messagesEndRef = useRef(null)
 
@@ -70,11 +70,25 @@ function ChatWindow({ session, onSendMessage }) {
       </div>
 
       <div className="input-container">
+        <div className="mode-toggle">
+          <button
+            className={`mode-btn ${mode === 'sql' ? 'active' : ''}`}
+            onClick={() => onModeChange('sql')}
+          >
+            LangChain (SQL)
+          </button>
+          <button
+            className={`mode-btn ${mode === 'agent' ? 'active' : ''}`}
+            onClick={() => onModeChange('agent')}
+          >
+            LangGraph (Agent)
+          </button>
+        </div>
         <form onSubmit={handleSubmit} className="input-form">
           <input
             type="text"
             className="message-input"
-            placeholder="Ask about movies..."
+            placeholder={mode === 'agent' ? "Ask the agent about movies..." : "Ask about movies..."}
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
           />

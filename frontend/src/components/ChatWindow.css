@@ -115,6 +115,37 @@
   color: #212529;
 }
 
+.mode-toggle {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+  justify-content: center;
+  max-width: 800px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.mode-btn {
+  padding: 6px 16px;
+  border: 1px solid #dee2e6;
+  border-radius: 20px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 13px;
+  color: #495057;
+  transition: all 0.2s;
+}
+
+.mode-btn.active {
+  background: #2196f3;
+  color: white;
+  border-color: #2196f3;
+}
+
+.mode-btn:hover:not(.active) {
+  background: #e9ecef;
+}
+
 .input-container {
   padding: 24px;
   background-color: #f8f9fa;

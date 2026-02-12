@@ -8,6 +8,7 @@ function App() {
     { id: 1, title: 'New Chat 1', messages: [] }
   ])
   const [activeSessionId, setActiveSessionId] = useState(1)
+  const [mode, setMode] = useState('sql') // 'sql' or 'agent'
 
   const activeSession = sessions.find(s => s.id === activeSessionId)
 
@@ -64,31 +65,46 @@ function App() {
     }))
 
     // Call backend API with conversation history
+    const endpoint = mode === 'agent' ? 'http://localhost:5001/agent' : 'http://localhost:5001/query'
+
     try {
-      const response = await fetch('http://localhost:5001/query', {
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           message,
-          history: conversationHistory  // Send chat history for context
+          history: conversationHistory
         })
       })
 
       const data = await response.json()
 
-      // Handle response based on status
-      if (data.status === 'success' && data.data) {
-        // Add bot response with query results
+      if (mode === 'agent' && data.status === 'success') {
+        // Agent mode: text response
         setSessions(prev => prev.map(s => {
           if (s.id === activeSessionId) {
             return {
               ...s,
               messages: [
                 ...s.messages,
-                { 
-                  id: Date.now(), 
+                { id: Date.now(), text: data.response, isUser: false }
+              ]
+            }
+          }
+          return s
+        }))
+      } else if (data.status === 'success' && data.data) {
+        // SQL mode: query results
+        setSessions(prev => prev.map(s => {
+          if (s.id === activeSessionId) {
+            return {
+              ...s,
+              messages: [
+                ...s.messages,
+                {
+                  id: Date.now(),
                   text: null,
                   queryResult: {
                     sql: data.sql,
@@ -97,7 +113,7 @@ function App() {
                     columns: data.columns,
                     row_count: data.row_count
                   },
-                  isUser: false 
+                  isUser: false
                 }
               ]
             }
@@ -105,17 +121,16 @@ function App() {
           return s
         }))
       } else {
-        // Handle error response from backend
         setSessions(prev => prev.map(s => {
           if (s.id === activeSessionId) {
             return {
               ...s,
               messages: [
                 ...s.messages,
-                { 
-                  id: Date.now(), 
-                  text: data.error || 'Sorry, I could not process your request.', 
-                  isUser: false 
+                {
+                  id: Date.now(),
+                  text: data.error || 'Sorry, I could not process your request.',
+                  isUser: false
                 }
               ]
             }
@@ -125,17 +140,16 @@ function App() {
       }
     } catch (error) {
       console.error('Error calling backend:', error)
-      // Add error message
       setSessions(prev => prev.map(s => {
         if (s.id === activeSessionId) {
           return {
             ...s,
             messages: [
               ...s.messages,
-              { 
-                id: Date.now(), 
-                text: 'Sorry, there was an error connecting to the server. Please make sure the backend is running.', 
-                isUser: false 
+              {
+                id: Date.now(),
+                text: 'Sorry, there was an error connecting to the server. Please make sure the backend is running.',
+                isUser: false
               }
             ]
           }
@@ -156,6 +170,8 @@ function App() {
       <ChatWindow
         session={activeSession}
         onSendMessage={handleSendMessage}
+        mode={mode}
+        onModeChange={setMode}
       />
     </div>
   )
