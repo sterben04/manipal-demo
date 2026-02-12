@@ -27,7 +27,7 @@ Create your own branch from the setup step:
 
 ```bash
 git checkout demo2-step-0-setup
-git checkout -b my-workshop
+git checkout -b my-workshop-<yourname>
 ```
 
 ### 2. Set up the backend
