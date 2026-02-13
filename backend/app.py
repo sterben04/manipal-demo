@@ -1,13 +1,12 @@
+from dotenv import load_dotenv
+load_dotenv()
+
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from database import init_db, execute_sql_query
 from nl_to_sql import generate_sql_from_prompt, validate_sql_query
 from graph import run_agent
-from dotenv import load_dotenv
 import os
-
-# Load environment variables
-load_dotenv()
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for frontend requests
